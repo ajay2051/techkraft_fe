@@ -1,75 +1,73 @@
-# React + TypeScript + Vite
+# Hiring Portal — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A candidate hiring pipeline built with **React + TypeScript + Tailwind + Axios + TanStack Query**. Dark teal glassmorphic UI, fully responsive.
 
-Currently, two official plugins are available:
+## Pages
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Page | Route | Access |
+|---|---|---|
+| Apply | `/` | Public — candidate submits application |
+| Login | `/login` | Public — single form, role comes from server response |
+| Reviewer Registration | `/register/reviewer` | Public |
+| Admin Registration | `/register/admin` | Public |
+| Dashboard | `/dashboard` | Logged in — candidates table |
+| Candidate Details | `/candidates/:id` | Logged in |
+| 404 | `*` | — |
 
-## React Compiler
+## Roles
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Reviewer** — view candidates, view scores, view candidate details.
+- **Admin** — everything a reviewer can do, **plus**: view/update internal notes, update candidate status, create/update scores, delete candidates.
 
-## Expanding the ESLint configuration
+Role is read from the `user` object stored in `localStorage` after login (`user_role: "reviewer" | "admin"`).
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Auth
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- JWT `access_token` / `refresh_token` + `user` saved to `localStorage` on login.
+- `axiosInstance.ts` auto-attaches `Authorization: Bearer <access_token>` to every request and clears the session + redirects to `/login` on token expiry.
+- `useAuthGuard()` protects the dashboard from direct URL access when logged out.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## API endpoints used
 
 ```
+POST   /auth/login/
+POST   /auth/create_reviewer_user/
+POST   /auth/create_admin_user/
+GET    /candidate/list_candidates/?page=
+GET    /candidate/{id}/
+DELETE /candidate/{id}/              (soft delete)
+PATCH  /candidate/{id}/status/
+PATCH  /candidate/{id}/               (internal_notes)
+POST   /candidates/{id}/scores/
+PATCH  /candidates/{id}/scores/{score_id}/
+```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Setup
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```bash
+npm install
+cp .env.example .env   # set VITE_API_BASE_URL
+npm run dev
+```
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Project structure
 
 ```
+src/
+├── globals.css              ← all design tokens & styles — edit here for theming
+├── lib/axiosInstance.ts     ← shared axios instance, interceptors, TOKEN_KEYS
+├── hooks/useAuthGuard.ts
+└── pages/
+    ├── ApplyPage.tsx
+    ├── Login.tsx                    (Reviewer + Admin login, same form)
+    ├── Registration.tsx             (Reviewer + Admin registration)
+    ├── Dashboard.tsx                (candidates table)
+    ├── CandidateDetailsPage.tsx     (details, status, notes, scores)
+    └── NotFoundPage.tsx
+```
+
+Most pages are single-file components (types, API calls, hooks, and UI combined) by design — no splitting across separate modules per feature.
+
+## Known gaps
+
+None currently — all core flows (apply, auth, list, details, status, notes, scores, delete) are wired to live endpoints.
