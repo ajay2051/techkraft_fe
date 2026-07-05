@@ -1,6 +1,7 @@
 import { useState, type SVGProps } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import axiosInstance, {clearSession, TOKEN_KEYS} from "../middleware/axiosinterceptor.tsx";
+import useAuthGuard from "../middleware/authguard.tsx";
 
 /* ==========================================================================
    TYPES
@@ -55,6 +56,12 @@ const listCandidates = async (
     return data;
 };
 
+const deleteCandidate = async (id: number): Promise<void> => {
+    // Bearer token is attached automatically by axiosInstance's request
+    // interceptor — no manual header needed here.
+    await axiosInstance.delete(`/candidate/${id}/`);
+};
+
 /* ==========================================================================
    HOOK
    ========================================================================== */
@@ -66,6 +73,16 @@ const useCandidates = (page: number) => {
     });
 };
 
+const useDeleteCandidate = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: deleteCandidate,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["candidates"] });
+        },
+    });
+};
+
 /* ==========================================================================
    ICONS — plain inline SVGs, no icon library dependency
    ========================================================================== */
@@ -73,16 +90,6 @@ const EyeIcon = (props: SVGProps<SVGSVGElement>) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
         <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" strokeLinecap="round" strokeLinejoin="round" />
         <circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-);
-
-const PencilIcon = (props: SVGProps<SVGSVGElement>) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
-        <path
-            d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        />
     </svg>
 );
 
@@ -194,63 +201,6 @@ const DetailsModal = ({ candidate, onClose }: DetailsModalProps) => (
 );
 
 /* ==========================================================================
-   EDIT NOTES MODAL — admin only
-   ========================================================================== */
-interface EditNotesModalProps {
-    candidate: CandidateItem;
-    onClose: () => void;
-    onSave: (id: number, note: string) => void;
-    isSaving?: boolean;
-}
-
-const EditNotesModal = ({
-                            candidate,
-                            onClose,
-                            onSave,
-                            isSaving,
-                        }: EditNotesModalProps) => {
-    const [note, setNote] = useState(candidate.internal_notes ?? "");
-
-    return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-                <div className="modal-header">
-                    <h3 className="modal-title">Internal notes — {candidate.name}</h3>
-                    <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
-                        <CloseIcon width={18} height={18} />
-                    </button>
-                </div>
-
-                <div className="modal-body">
-          <textarea
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              placeholder="Add a note for other reviewers…"
-              className="notes-textarea"
-              rows={5}
-              autoFocus
-          />
-                </div>
-
-                <div className="internal-notes-actions">
-                    <button type="button" className="notes-cancel-button" onClick={onClose}>
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        className="notes-save-button"
-                        onClick={() => onSave(candidate.id, note.trim())}
-                        disabled={isSaving}
-                    >
-                        {isSaving ? "Saving…" : "Save"}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-/* ==========================================================================
    DASHBOARD PAGE
    ========================================================================== */
 const getStoredUser = (): StoredUser | null => {
@@ -264,9 +214,9 @@ const getStoredUser = (): StoredUser | null => {
 };
 
 export const DashboardPage = () => {
+    useAuthGuard();
     const [page, setPage] = useState(1);
     const [viewingCandidate, setViewingCandidate] = useState<CandidateItem | null>(null);
-    const [editingCandidate, setEditingCandidate] = useState<CandidateItem | null>(null);
 
     const user = getStoredUser();
     const isAdmin = user?.user_role === "admin";
@@ -278,24 +228,14 @@ export const DashboardPage = () => {
         window.location.href = "/login";
     };
 
-    const handleSaveNote = (id: number, note: string) => {
-        // NOTE: no "update candidate" endpoint was provided alongside
-        // list_candidates/, so this only closes the modal for now.
-        // Wire this up to your update endpoint, e.g.:
-        // await axiosInstance.patch(`/candidate/update_candidate/${id}/`, { internal_notes: note });
-        console.log("Save internal note", { id, note });
-        setEditingCandidate(null);
-    };
+    const deleteMutation = useDeleteCandidate();
 
     const handleDelete = (candidate: CandidateItem) => {
-        // NOTE: no "delete candidate" endpoint was provided.
-        // Wire this up once available, e.g.:
-        // await axiosInstance.delete(`/candidate/delete_candidate/${candidate.id}/`);
         const confirmed = window.confirm(
             `Delete ${candidate.name}'s application? This cannot be undone.`
         );
         if (confirmed) {
-            console.log("Delete candidate", candidate.id);
+            deleteMutation.mutate(candidate.id);
         }
     };
 
@@ -348,6 +288,7 @@ export const DashboardPage = () => {
                                     <th>Role applied</th>
                                     <th>Skills</th>
                                     <th>Status</th>
+                                    {isAdmin && <th>Internal notes</th>}
                                     <th>Applied</th>
                                     <th className="col-actions">Actions</th>
                                 </tr>
@@ -372,6 +313,19 @@ export const DashboardPage = () => {
                           {candidate.status}
                         </span>
                                         </td>
+                                        {isAdmin && (
+                                            <td data-label="Internal notes" className="notes-cell">
+                                                {candidate.internal_notes ? (
+                                                    <span title={candidate.internal_notes}>
+        {candidate.internal_notes.length > 40
+            ? `${candidate.internal_notes.slice(0, 40)}…`
+            : candidate.internal_notes}
+      </span>
+                                                ) : (
+                                                    <span className="notes-empty">No notes</span>
+                                                )}
+                                            </td>
+                                        )}
                                         <td data-label="Applied">
                                             {new Date(candidate.created_at).toLocaleDateString()}
                                         </td>
@@ -387,24 +341,13 @@ export const DashboardPage = () => {
                                                     <EyeIcon width={17} height={17} />
                                                 </button>
 
-                                                {isAdmin && (
-                                                    <button
-                                                        type="button"
-                                                        className="icon-button"
-                                                        title="Edit internal notes"
-                                                        aria-label={`Edit internal notes for ${candidate.name}`}
-                                                        onClick={() => setEditingCandidate(candidate)}
-                                                    >
-                                                        <PencilIcon width={17} height={17} />
-                                                    </button>
-                                                )}
-
                                                 <button
                                                     type="button"
                                                     className="icon-button icon-button-danger"
                                                     title="Delete candidate"
                                                     aria-label={`Delete ${candidate.name}`}
                                                     onClick={() => handleDelete(candidate)}
+                                                    disabled={deleteMutation.isPending && deleteMutation.variables === candidate.id}
                                                 >
                                                     <TrashIcon width={17} height={17} />
                                                 </button>
@@ -447,14 +390,6 @@ export const DashboardPage = () => {
                 <DetailsModal
                     candidate={viewingCandidate}
                     onClose={() => setViewingCandidate(null)}
-                />
-            )}
-
-            {editingCandidate && isAdmin && (
-                <EditNotesModal
-                    candidate={editingCandidate}
-                    onClose={() => setEditingCandidate(null)}
-                    onSave={handleSaveNote}
                 />
             )}
         </div>

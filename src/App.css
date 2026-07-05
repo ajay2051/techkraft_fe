@@ -940,3 +940,17 @@ h3 {
     text-align: center;
   }
 }
+
+.notes-cell {
+  max-width: 200px;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notes-empty {
+  color: var(--color-text-faint);
+  font-style: italic;
+}
