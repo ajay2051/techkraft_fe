@@ -95,6 +95,17 @@ const createCandidateScore = async (
     await axiosInstance.post(`/candidates/${id}/scores/`, payload);
 };
 
+const updateCandidateScore = async (
+    candidateId: string,
+    scoreId: number,
+    payload: CreateScorePayload
+): Promise<void> => {
+    await axiosInstance.patch(
+        `/candidates/${candidateId}/scores/${scoreId}/`,
+        payload
+    );
+};
+
 
 const useCandidateDetails = (id: string) => {
     return useQuery({
@@ -132,6 +143,17 @@ const useCreateCandidateScore = (id: string) => {
         mutationFn: (payload: CreateScorePayload) => createCandidateScore(id, payload),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["candidate", id] });
+        },
+    });
+};
+
+const useUpdateCandidateScore = (candidateId: string) => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ scoreId, payload }: { scoreId: number; payload: CreateScorePayload }) =>
+            updateCandidateScore(candidateId, scoreId, payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["candidate", candidateId] });
         },
     });
 };
@@ -227,6 +249,7 @@ interface ScoreModalProps {
     initialScore?: CandidateScore;
     onClose: () => void;
     onCreate: (payload: CreateScorePayload) => void;
+    onUpdate: (payload: CreateScorePayload) => void;
     isSaving: boolean;
     isError: boolean;
 }
@@ -236,6 +259,7 @@ const ScoreModal = ({
                         initialScore,
                         onClose,
                         onCreate,
+                        onUpdate,
                         isSaving,
                         isError,
                     }: ScoreModalProps) => {
@@ -244,14 +268,15 @@ const ScoreModal = ({
     const [notes, setNotes] = useState(initialScore?.notes ?? "");
 
     const handleSave = () => {
+        const payload = {
+            category: category.trim(),
+            score: Number(score),
+            notes: notes.trim(),
+        };
         if (mode === "create") {
-            onCreate({ category: category.trim(), score: Number(score), notes: notes.trim() });
+            onCreate(payload);
         } else {
-            // NOTE: no "update score" endpoint has been provided yet.
-            // Wire this up once available, e.g.:
-            // await axiosInstance.patch(`/candidates/${candidateId}/scores/${initialScore?.id}/`, { category, score, notes });
-            console.log("Update score", { id: initialScore?.id, score: Number(score), category, notes });
-            onClose();
+            onUpdate(payload);
         }
     };
 
@@ -363,6 +388,17 @@ export const CandidateDetailsPage = () => {
         });
     };
 
+    const [editingScoreId, setEditingScoreId] = useState<number | null>(null);
+    const updateScoreMutation = useUpdateCandidateScore(id ?? "");
+
+    const handleUpdateScore = (payload: CreateScorePayload) => {
+        if (editingScoreId === null) return;
+        updateScoreMutation.mutate(
+            { scoreId: editingScoreId, payload },
+            { onSuccess: () => setScoreModal(null) }
+        );
+    };
+
     return (
         <div className="dashboard-shell">
             <header className="dashboard-topbar">
@@ -470,14 +506,7 @@ export const CandidateDetailsPage = () => {
                                     >
                                         Create Score
                                     </button>
-                                    <button
-                                        type="button"
-                                        className="ghost-button"
-                                        onClick={() => setScoreModal("update")}
-                                        disabled={candidate.scores.length === 0}
-                                    >
-                                        Update Score
-                                    </button>
+
                                 </div>
                             </div>
 
@@ -488,8 +517,22 @@ export const CandidateDetailsPage = () => {
                                     {candidate.scores.map((score) => (
                                         <div key={score.id} className="score-card">
                                             <div className="score-card-header">
-                                                <span className="score-value">{score.score}</span>
-                                                <span className="score-category">{score.category}</span>
+                                                <div className="score-card-meta">
+                                                    <span className="score-value">{score.score}</span>
+                                                    <span className="score-category">{score.category}</span>
+                                                </div>
+                                                {isAdmin && (
+                                                    <button
+                                                        type="button"
+                                                        className="score-update-button"
+                                                        onClick={() => {
+                                                            setEditingScoreId(score.id);
+                                                            setScoreModal("update");
+                                                        }}
+                                                    >
+                                                        Update
+                                                    </button>
+                                                )}
                                             </div>
                                             <p className="score-notes">{score.notes}</p>
                                             <p className="candidate-date">
@@ -536,11 +579,25 @@ export const CandidateDetailsPage = () => {
             {scoreModal && candidate && (
                 <ScoreModal
                     mode={scoreModal}
-                    initialScore={scoreModal === "update" ? candidate.scores[0] : undefined}
-                    onClose={() => setScoreModal(null)}
+                    initialScore={
+                        scoreModal === "update"
+                            ? candidate.scores.find((s) => s.id === editingScoreId)
+                            : undefined
+                    }
+                    onClose={() => {
+                        setScoreModal(null);
+                        setEditingScoreId(null);
+                    }}
                     onCreate={handleCreateScore}
-                    isSaving={createScoreMutation.isPending}
-                    isError={createScoreMutation.isError}
+                    onUpdate={handleUpdateScore}
+                    isSaving={
+                        scoreModal === "create"
+                            ? createScoreMutation.isPending
+                            : updateScoreMutation.isPending
+                    }
+                    isError={
+                        scoreModal === "create" ? createScoreMutation.isError : updateScoreMutation.isError
+                    }
                 />
             )}
         </div>
