@@ -1053,3 +1053,25 @@ h3 {
     text-align: center;
   }
 }
+
+.status-select {
+  background: #0f2f2a; /* solid dark, not the translucent rgba from before */
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.6rem;
+  color: var(--color-text-primary);
+  font-size: 0.82rem;
+  outline: none;
+  cursor: pointer;
+}
+
+.status-select:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-dim);
+}
+
+.status-select option {
+  background: #0f2f2a;
+  color: var(--color-text-primary);
+  padding: 0.4rem;
+}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import axiosInstance, { TOKEN_KEYS } from "../middleware/axiosinterceptor.tsx";
 import useAuthGuard from "../middleware/authguard.tsx";
 
@@ -58,11 +58,40 @@ const getCandidateDetails = async (
     return data;
 };
 
+
+type CandidateStatus = "new" | "reviewed" | "hired" | "rejected";
+
+const CANDIDATE_STATUSES: CandidateStatus[] = [
+    "new",
+    "reviewed",
+    "hired",
+    "rejected",
+];
+
+const updateCandidateStatus = async (
+    id: string,
+    status: CandidateStatus
+): Promise<void> => {
+    await axiosInstance.patch(`/candidate/${id}/status/`, { status });
+};
+
+
 const useCandidateDetails = (id: string) => {
     return useQuery({
         queryKey: ["candidate", id],
         queryFn: () => getCandidateDetails(id),
         enabled: Boolean(id),
+    });
+};
+
+const useUpdateCandidateStatus = (id: string) => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (status: CandidateStatus) => updateCandidateStatus(id, status),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["candidate", id] });
+            queryClient.invalidateQueries({ queryKey: ["candidates"] });
+        },
     });
 };
 
@@ -277,6 +306,15 @@ export const CandidateDetailsPage = () => {
     const { data, isLoading, isError, error } = useCandidateDetails(id ?? "");
     const candidate = data?.data;
 
+    const [selectedStatus, setSelectedStatus] = useState<CandidateStatus | null>(null);
+    const statusMutation = useUpdateCandidateStatus(id ?? "");
+
+    const handleStatusUpdate = () => {
+        if (selectedStatus) {
+            statusMutation.mutate(selectedStatus);
+        }
+    };
+
     return (
         <div className="dashboard-shell">
             <header className="dashboard-topbar">
@@ -307,7 +345,34 @@ export const CandidateDetailsPage = () => {
                                     <h2 className="form-title">{candidate.name}</h2>
                                     <p className="candidate-email">{candidate.email}</p>
                                 </div>
-                                <span className={statusClass(candidate.status)}>{candidate.status}</span>
+                                <div className="status-update-group">
+                                    <span className={statusClass(candidate.status)}>{candidate.status}</span>
+                                    <select
+                                        value={selectedStatus ?? candidate.status}
+                                        onChange={(event) =>
+                                            setSelectedStatus(event.target.value as CandidateStatus)
+                                        }
+                                        className="status-select"
+                                    >
+                                        {CANDIDATE_STATUSES.map((status) => (
+                                            <option key={status} value={status}>
+                                                {status}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        type="button"
+                                        className="ghost-button"
+                                        onClick={handleStatusUpdate}
+                                        disabled={
+                                            statusMutation.isPending ||
+                                            !selectedStatus ||
+                                            selectedStatus === candidate.status
+                                        }
+                                    >
+                                        {statusMutation.isPending ? "Updating…" : "Update Status"}
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="detail-grid">
