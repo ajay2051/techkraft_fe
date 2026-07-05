@@ -82,6 +82,19 @@ const updateInternalNote = async (
     await axiosInstance.patch(`/candidate/${id}/`, { internal_notes });
 };
 
+interface CreateScorePayload {
+    category: string;
+    score: number;
+    notes: string;
+}
+
+const createCandidateScore = async (
+    id: string,
+    payload: CreateScorePayload
+): Promise<void> => {
+    await axiosInstance.post(`/candidates/${id}/scores/`, payload);
+};
+
 
 const useCandidateDetails = (id: string) => {
     return useQuery({
@@ -109,6 +122,16 @@ const useUpdateInternalNote = (id: string) => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["candidate", id] });
             queryClient.invalidateQueries({ queryKey: ["candidates"] });
+        },
+    });
+};
+
+const useCreateCandidateScore = (id: string) => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (payload: CreateScorePayload) => createCandidateScore(id, payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["candidate", id] });
         },
     });
 };
@@ -203,34 +226,33 @@ interface ScoreModalProps {
     mode: "create" | "update";
     initialScore?: CandidateScore;
     onClose: () => void;
+    onCreate: (payload: CreateScorePayload) => void;
+    isSaving: boolean;
+    isError: boolean;
 }
 
-const ScoreModal = ({ mode, initialScore, onClose }: ScoreModalProps) => {
+const ScoreModal = ({
+                        mode,
+                        initialScore,
+                        onClose,
+                        onCreate,
+                        isSaving,
+                        isError,
+                    }: ScoreModalProps) => {
     const [score, setScore] = useState(initialScore?.score?.toString() ?? "");
     const [category, setCategory] = useState(initialScore?.category ?? "");
     const [notes, setNotes] = useState(initialScore?.notes ?? "");
-    const [isSaving, setIsSaving] = useState(false);
 
-    const handleSave = async () => {
-        setIsSaving(true);
+    const handleSave = () => {
         if (mode === "create") {
-            // NOTE: no "create score" endpoint has been provided yet.
-            // Wire this up once available, e.g.:
-            // await axiosInstance.post(`/candidate/${candidateId}/score/`, { score: Number(score), category, notes });
-            console.log("Create score", { score: Number(score), category, notes });
+            onCreate({ category: category.trim(), score: Number(score), notes: notes.trim() });
         } else {
             // NOTE: no "update score" endpoint has been provided yet.
             // Wire this up once available, e.g.:
-            // await axiosInstance.patch(`/candidate/score/${initialScore?.id}/`, { score: Number(score), category, notes });
-            console.log("Update score", {
-                id: initialScore?.id,
-                score: Number(score),
-                category,
-                notes,
-            });
+            // await axiosInstance.patch(`/candidates/${candidateId}/scores/${initialScore?.id}/`, { category, score, notes });
+            console.log("Update score", { id: initialScore?.id, score: Number(score), category, notes });
+            onClose();
         }
-        setIsSaving(false);
-        onClose();
     };
 
     return (
@@ -246,9 +268,7 @@ const ScoreModal = ({ mode, initialScore, onClose }: ScoreModalProps) => {
                 </div>
                 <div className="modal-body">
                     <div className="field-group">
-                        <label htmlFor="score" className="field-label">
-                            Score
-                        </label>
+                        <label htmlFor="score" className="field-label">Score</label>
                         <input
                             id="score"
                             type="number"
@@ -259,9 +279,7 @@ const ScoreModal = ({ mode, initialScore, onClose }: ScoreModalProps) => {
                         />
                     </div>
                     <div className="field-group">
-                        <label htmlFor="category" className="field-label">
-                            Category
-                        </label>
+                        <label htmlFor="category" className="field-label">Category</label>
                         <input
                             id="category"
                             type="text"
@@ -272,9 +290,7 @@ const ScoreModal = ({ mode, initialScore, onClose }: ScoreModalProps) => {
                         />
                     </div>
                     <div className="field-group">
-                        <label htmlFor="score-notes" className="field-label">
-                            Notes
-                        </label>
+                        <label htmlFor="score-notes" className="field-label">Notes</label>
                         <textarea
                             id="score-notes"
                             value={notes}
@@ -284,6 +300,9 @@ const ScoreModal = ({ mode, initialScore, onClose }: ScoreModalProps) => {
                             rows={3}
                         />
                     </div>
+                    {isError && (
+                        <p className="form-server-error">Failed to save score. Please try again.</p>
+                    )}
                 </div>
                 <div className="internal-notes-actions">
                     <button type="button" className="notes-cancel-button" onClick={onClose}>
@@ -333,6 +352,14 @@ export const CandidateDetailsPage = () => {
     const handleSaveNote = (note: string) => {
         noteMutation.mutate(note, {
             onSuccess: () => setIsNoteModalOpen(false),
+        });
+    };
+
+    const createScoreMutation = useCreateCandidateScore(id ?? "");
+
+    const handleCreateScore = (payload: CreateScorePayload) => {
+        createScoreMutation.mutate(payload, {
+            onSuccess: () => setScoreModal(null),
         });
     };
 
@@ -511,6 +538,9 @@ export const CandidateDetailsPage = () => {
                     mode={scoreModal}
                     initialScore={scoreModal === "update" ? candidate.scores[0] : undefined}
                     onClose={() => setScoreModal(null)}
+                    onCreate={handleCreateScore}
+                    isSaving={createScoreMutation.isPending}
+                    isError={createScoreMutation.isError}
                 />
             )}
         </div>
