@@ -75,6 +75,13 @@ const updateCandidateStatus = async (
     await axiosInstance.patch(`/candidate/${id}/status/`, { status });
 };
 
+const updateInternalNote = async (
+    id: string,
+    internal_notes: string
+): Promise<void> => {
+    await axiosInstance.patch(`/candidate/${id}/`, { internal_notes });
+};
+
 
 const useCandidateDetails = (id: string) => {
     return useQuery({
@@ -88,6 +95,17 @@ const useUpdateCandidateStatus = (id: string) => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (status: CandidateStatus) => updateCandidateStatus(id, status),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["candidate", id] });
+            queryClient.invalidateQueries({ queryKey: ["candidates"] });
+        },
+    });
+};
+
+const useUpdateInternalNote = (id: string) => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (internal_notes: string) => updateInternalNote(id, internal_notes),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["candidate", id] });
             queryClient.invalidateQueries({ queryKey: ["candidates"] });
@@ -130,21 +148,13 @@ const statusClass = (status: string) => {
 interface NoteModalProps {
     initialNote: string;
     onClose: () => void;
+    onSave: (note: string) => void;
+    isSaving: boolean;
+    isError: boolean;
 }
 
-const NoteModal = ({ initialNote, onClose }: NoteModalProps) => {
+const NoteModal = ({ initialNote, onClose, onSave, isSaving, isError }: NoteModalProps) => {
     const [note, setNote] = useState(initialNote);
-    const [isSaving, setIsSaving] = useState(false);
-
-    const handleSave = async () => {
-        setIsSaving(true);
-        // NOTE: no "update internal notes" endpoint has been provided yet.
-        // Wire this up once available, e.g.:
-        // await axiosInstance.patch(`/candidate/${candidateId}/`, { internal_notes: note });
-        console.log("Update internal note", note);
-        setIsSaving(false);
-        onClose();
-    };
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -164,6 +174,9 @@ const NoteModal = ({ initialNote, onClose }: NoteModalProps) => {
               rows={5}
               autoFocus
           />
+                    {isError && (
+                        <p className="form-server-error">Failed to save note. Please try again.</p>
+                    )}
                 </div>
                 <div className="internal-notes-actions">
                     <button type="button" className="notes-cancel-button" onClick={onClose}>
@@ -172,7 +185,7 @@ const NoteModal = ({ initialNote, onClose }: NoteModalProps) => {
                     <button
                         type="button"
                         className="notes-save-button"
-                        onClick={handleSave}
+                        onClick={() => onSave(note.trim())}
                         disabled={isSaving}
                     >
                         {isSaving ? "Saving…" : "Save"}
@@ -313,6 +326,14 @@ export const CandidateDetailsPage = () => {
         if (selectedStatus) {
             statusMutation.mutate(selectedStatus);
         }
+    };
+
+    const noteMutation = useUpdateInternalNote(id ?? "");
+
+    const handleSaveNote = (note: string) => {
+        noteMutation.mutate(note, {
+            onSuccess: () => setIsNoteModalOpen(false),
+        });
     };
 
     return (
@@ -479,6 +500,9 @@ export const CandidateDetailsPage = () => {
                 <NoteModal
                     initialNote={candidate.internal_notes ?? ""}
                     onClose={() => setIsNoteModalOpen(false)}
+                    onSave={handleSaveNote}
+                    isSaving={noteMutation.isPending}
+                    isError={noteMutation.isError}
                 />
             )}
 
