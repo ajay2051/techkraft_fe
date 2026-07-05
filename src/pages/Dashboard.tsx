@@ -1,4 +1,5 @@
 import { useState, type SVGProps } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import axiosInstance, {clearSession, TOKEN_KEYS} from "../middleware/axiosinterceptor.tsx";
 import useAuthGuard from "../middleware/authguard.tsx";
@@ -103,12 +104,6 @@ const TrashIcon = (props: SVGProps<SVGSVGElement>) => (
     </svg>
 );
 
-const CloseIcon = (props: SVGProps<SVGSVGElement>) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
-        <path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-);
-
 /* ==========================================================================
    STATUS BADGE
    ========================================================================== */
@@ -128,77 +123,7 @@ const statusClass = (status: string) => {
     }
 };
 
-/* ==========================================================================
-   DETAILS MODAL — full candidate info (read-only)
-   ========================================================================== */
-interface DetailsModalProps {
-    candidate: CandidateItem;
-    onClose: () => void;
-}
 
-const DetailsModal = ({ candidate, onClose }: DetailsModalProps) => (
-    <div className="modal-overlay" onClick={onClose}>
-        <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-header">
-                <h3 className="modal-title">{candidate.name}</h3>
-                <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
-                    <CloseIcon width={18} height={18} />
-                </button>
-            </div>
-
-            <div className="modal-body">
-                <div className="modal-row">
-                    <span className="modal-label">Email</span>
-                    <span className="modal-value">{candidate.email}</span>
-                </div>
-                <div className="modal-row">
-                    <span className="modal-label">Role applied</span>
-                    <span className="modal-value">{candidate.role_applied}</span>
-                </div>
-                <div className="modal-row">
-                    <span className="modal-label">Status</span>
-                    <span className={statusClass(candidate.status)}>{candidate.status}</span>
-                </div>
-                <div className="modal-row">
-                    <span className="modal-label">Skills</span>
-                    <div className="candidate-skills">
-                        {candidate.skills.map((skill) => (
-                            <span key={skill} className="skill-chip">
-                #{skill}
-              </span>
-                        ))}
-                    </div>
-                </div>
-                <div className="modal-row">
-                    <span className="modal-label">Keywords</span>
-                    <span className="modal-value">{candidate.keywords || "—"}</span>
-                </div>
-                <div className="modal-row">
-                    <span className="modal-label">Scores</span>
-                    <span className="modal-value">
-            {candidate.scores.length ? candidate.scores.join(", ") : "Not scored yet"}
-          </span>
-                </div>
-                <div className="modal-row">
-                    <span className="modal-label">Internal notes</span>
-                    <span className="modal-value">{candidate.internal_notes || "No notes yet."}</span>
-                </div>
-                <div className="modal-row">
-                    <span className="modal-label">Applied on</span>
-                    <span className="modal-value">
-            {new Date(candidate.created_at).toLocaleString()}
-          </span>
-                </div>
-                <div className="modal-row">
-                    <span className="modal-label">Last updated</span>
-                    <span className="modal-value">
-            {new Date(candidate.updated_at).toLocaleString()}
-          </span>
-                </div>
-            </div>
-        </div>
-    </div>
-);
 
 /* ==========================================================================
    DASHBOARD PAGE
@@ -215,8 +140,9 @@ const getStoredUser = (): StoredUser | null => {
 
 export const DashboardPage = () => {
     useAuthGuard();
+    const navigate = useNavigate();
     const [page, setPage] = useState(1);
-    const [viewingCandidate, setViewingCandidate] = useState<CandidateItem | null>(null);
+    // const [viewingCandidate, setViewingCandidate] = useState<CandidateItem | null>(null);
 
     const user = getStoredUser();
     const isAdmin = user?.user_role === "admin";
@@ -336,7 +262,7 @@ export const DashboardPage = () => {
                                                     className="icon-button"
                                                     title="View details"
                                                     aria-label={`View details for ${candidate.name}`}
-                                                    onClick={() => setViewingCandidate(candidate)}
+                                                    onClick={() => navigate(`/candidates/${candidate.id}`)}
                                                 >
                                                     <EyeIcon width={17} height={17} />
                                                 </button>
@@ -385,13 +311,6 @@ export const DashboardPage = () => {
                     </>
                 )}
             </main>
-
-            {viewingCandidate && (
-                <DetailsModal
-                    candidate={viewingCandidate}
-                    onClose={() => setViewingCandidate(null)}
-                />
-            )}
         </div>
     );
 };
